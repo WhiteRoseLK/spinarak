@@ -25,7 +25,7 @@ jobs:
       run: |
         # font package needed for Japanese to render in captured screenshots
         sudo apt-get install fonts-noto-cjk
-        pip install chromedriver-autoinstaller selenium pyvirtualdisplay beautifulsoup4 requests
+        pip install undetected-chromedriver selenium pyvirtualdisplay beautifulsoup4 requests
         
     - name: Run Python Selenium script
       env:

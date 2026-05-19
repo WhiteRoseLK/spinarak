@@ -1,11 +1,10 @@
-import chromedriver_autoinstaller, os, uuid, random, time, requests
+import undetected_chromedriver as uc
+import os, uuid, random, time, requests
 from datetime import date
 from bs4 import BeautifulSoup
-from selenium import webdriver
 from pyvirtualdisplay import Display
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select
-from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.action_chains import ActionChains
 
@@ -39,8 +38,6 @@ magic_cell = ''
 
 display = Display(visible=0, size=(800, 800))
 display.start()
-
-chromedriver_autoinstaller.install()
 
 def send_telegram(avail_slots, filename, location):
     try:
@@ -113,10 +110,10 @@ def debug_screenshot(driver, location, step):
     return filename
 
 def create_booking(num_of_guests, location):
-    chrome_options = webdriver.ChromeOptions()
+    chrome_options = uc.ChromeOptions()
     chrome_options.add_argument("--window-size=1200,1200")
 
-    driver = webdriver.Chrome(options=chrome_options)
+    driver = uc.Chrome(options=chrome_options)
     driver.get(SITE_URLS[location])
     time.sleep(random.randint(3, 5))
 
