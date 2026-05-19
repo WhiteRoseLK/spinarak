@@ -14,10 +14,8 @@ telegram_token = os.environ['TELEGRAM_BOT_TOKEN']
 telegram_chat_id = os.environ['TELEGRAM_CHAT_ID']
 
 num_iterations = 10
-day_of_month='28'
 num_of_guests=3
-location = 'Tokyo'
-#location = 'Osaka'
+location = 'Osaka'
 
 magic_cell = ''
 
@@ -34,7 +32,7 @@ def send_telegram(avail_slots, filename):
         text = "\U0001F6A8 Available days found by Spinarak bot:\n\n"
         for day in avail_slots:
             text += f"• {day}\n"
-        text += "\nGo book now: https://reserve.pokemon-cafe.jp/reserve/step1"
+        text += "\nGo book now: https://osaka.pokemon-cafe.jp/reserve/step1"
 
         with open(filename, 'rb') as photo:
             response = requests.post(
@@ -47,10 +45,9 @@ def send_telegram(avail_slots, filename):
     except Exception as e:
         print(f"Telegram error: {str(e)}")
 
-def create_booking(day_of_month, num_of_guests, location):
-    '''Create a reservation for Pokemon Cafe in Tokyo
+def create_booking(num_of_guests, location):
+    '''Create a reservation for Pokemon Cafe
     Keyword arguments:
-    day_of_month -- day of the month to book
     num_of_guests -- number of guests to book (1-8)
     '''
 
@@ -110,4 +107,4 @@ def create_booking(day_of_month, num_of_guests, location):
     except NoSuchElementException:
         pass
 
-[create_booking(day_of_month, num_of_guests, location) for x in range(num_iterations)]
+[create_booking(num_of_guests, location) for x in range(num_iterations)]
