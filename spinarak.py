@@ -110,6 +110,17 @@ def create_booking(num_of_guests, location):
 
     driver = webdriver.Chrome(options=chrome_options)
     driver.get(SITE_URLS[location])
+    time.sleep(random.randint(3, 5))
+
+    # In test mode, immediately screenshot the landing page so we can inspect
+    # the current site structure and update XPaths if needed
+    if test_mode:
+        print(f'[{location}] TEST MODE — screenshot of landing page')
+        filename = f'hits/pokemon-cafe-test-landing-{location.lower()}-{date.today().strftime("%Y%m%d")}-{uuid.uuid4().hex}.png'
+        driver.save_screenshot(filename)
+        send_telegram_test(filename, location)
+        driver.quit()
+        return
 
     try:
         driver.find_element(By.XPATH, "//*[@id=\"forms-agree\"]/div/div[1]/label").click()
