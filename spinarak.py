@@ -123,8 +123,16 @@ def create_booking(num_of_guests, location):
         return
 
     try:
-        driver.find_element(By.XPATH, "//*[@id=\"forms-agree\"]/div/div[1]/label").click()
-        driver.find_element(By.XPATH, "//*[@id=\"forms-agree\"]/div/div[2]/button").click()
+        # Scroll to bottom so the CGU checkbox becomes interactable
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(random.randint(2, 3))
+        # Accept terms: try the original ID first, then fall back to generic checkbox/button
+        try:
+            driver.find_element(By.XPATH, "//*[@id=\"forms-agree\"]/div/div[1]/label").click()
+            driver.find_element(By.XPATH, "//*[@id=\"forms-agree\"]/div/div[2]/button").click()
+        except NoSuchElementException:
+            driver.find_element(By.XPATH, "//input[@type='checkbox']").click()
+            driver.find_element(By.XPATH, "//button[@type='submit'] | //input[@type='submit'] | //button[contains(@class,'agree')] | //button[contains(@class,'next')]").click()
         time.sleep(random.randint(3, 6))
         driver.find_element(By.XPATH, "/html/body/div/div/div[2]/div/div/a").click()
         time.sleep(random.randint(3, 6))
