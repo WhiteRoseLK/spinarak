@@ -19,7 +19,10 @@ target_days = ['18', '19', '20', '21']  # July 2026
 target_month = 7
 target_year = 2026
 test_mode = os.environ.get('TEST_MODE', '').lower() == 'true'
-error_screenshot_sent = set()  # prevents sending more than one error screenshot per location per run
+error_screenshot_sent = set()
+
+os.makedirs('hits', exist_ok=True)
+os.makedirs('debug', exist_ok=True)
 
 BOOKING_URLS = {
     'Tokyo': 'https://reserve.pokemon-cafe.jp/reserve/step1',
@@ -45,7 +48,6 @@ def send_telegram(avail_slots, filename, location):
         for day in avail_slots:
             text += f"• {day}\n"
         text += f"\nGo book now: {BOOKING_URLS[location]}"
-
         with open(filename, 'rb') as photo:
             response = requests.post(
                 f"{base_url}/sendPhoto",
@@ -57,10 +59,10 @@ def send_telegram(avail_slots, filename, location):
     except Exception as e:
         print(f"Telegram error: {str(e)}")
 
-def send_telegram_test(filename, location):
+def send_telegram_debug(filename, location, label):
     try:
         base_url = f"https://api.telegram.org/bot{telegram_token}"
-        text = f"\U0001F9EA [TEST - {location}] No slots found — screenshot of current calendar page"
+        text = f"\U0001F9EA [DEBUG - {location}] {label}"
         with open(filename, 'rb') as photo:
             response = requests.post(
                 f"{base_url}/sendPhoto",
@@ -68,13 +70,11 @@ def send_telegram_test(filename, location):
                 files={"photo": photo}
             )
         response.raise_for_status()
-        print("Telegram test message sent!")
+        print(f"Debug screenshot sent: {label}")
     except Exception as e:
         print(f"Telegram error: {str(e)}")
 
 def navigate_to_month(driver, month, year):
-    # Navigate forward until the target month/year is visible on the calendar.
-    # XPaths below cover common patterns — may need adjustment if the site changes.
     for _ in range(24):
         page = driver.page_source
         if str(year) in page and (f"{month}月" in page or f"/{month}/" in page):
@@ -105,6 +105,12 @@ def is_target_day(text):
             return True
     return False
 
+def debug_screenshot(driver, location, step):
+    filename = f'debug/{location.lower()}-{step}-{date.today().strftime("%Y%m%d")}-{uuid.uuid4().hex}.png'
+    driver.save_screenshot(filename)
+    send_telegram_debug(filename, location, step)
+    return filename
+
 def create_booking(num_of_guests, location):
     chrome_options = webdriver.ChromeOptions()
     chrome_options.add_argument("--window-size=1200,1200")
@@ -113,23 +119,17 @@ def create_booking(num_of_guests, location):
     driver.get(SITE_URLS[location])
     time.sleep(random.randint(3, 5))
 
-    # In test mode, immediately screenshot the landing page so we can inspect
-    # the current site structure and update XPaths if needed
     if test_mode:
-        print(f'[{location}] TEST MODE — screenshot of landing page')
-        filename = f'hits/pokemon-cafe-test-landing-{location.lower()}-{date.today().strftime("%Y%m%d")}-{uuid.uuid4().hex}.png'
-        driver.save_screenshot(filename)
-        send_telegram_test(filename, location)
+        debug_screenshot(driver, location, 'landing-page')
         driver.quit()
         return
 
     try:
-        # Scroll the CGU checkbox into view and click it via JS to bypass visibility issues
+        # Scroll the CGU checkbox into view and click via JS
         checkbox = driver.find_element(By.CSS_SELECTOR, "input[type='checkbox']")
         driver.execute_script("arguments[0].scrollIntoView(true);", checkbox)
         time.sleep(1)
         driver.execute_script("arguments[0].click();", checkbox)
-        # Click the submit/next button
         submit = driver.find_element(By.CSS_SELECTOR, "button[type='submit'], input[type='submit'], #forms-agree button")
         driver.execute_script("arguments[0].click();", submit)
         time.sleep(random.randint(3, 6))
@@ -141,16 +141,6 @@ def create_booking(num_of_guests, location):
 
         navigate_to_month(driver, target_month, target_year)
         time.sleep(random.randint(1, 2))
-
-        # In test mode, send a screenshot immediately after navigation
-        # so we can verify the bot is on the right page regardless of what happens next
-        if test_mode:
-            print(f'[{location}] TEST MODE — sending screenshot of current calendar page')
-            filename = f'hits/pokemon-cafe-test-{date.today().strftime("%Y%m%d")}-{uuid.uuid4().hex}.png'
-            driver.save_screenshot(filename)
-            send_telegram_test(filename, location)
-            driver.quit()
-            return
 
         soup = BeautifulSoup(driver.page_source, "html.parser")
         calendar_cells = soup.find_all("li")
@@ -184,9 +174,7 @@ def create_booking(num_of_guests, location):
         if location not in error_screenshot_sent:
             error_screenshot_sent.add(location)
             try:
-                filename = f'hits/pokemon-cafe-error-{location.lower()}-{date.today().strftime("%Y%m%d")}-{uuid.uuid4().hex}.png'
-                driver.save_screenshot(filename)
-                send_telegram_test(filename, location)
+                debug_screenshot(driver, location, 'error')
             except Exception as e2:
                 print(f"[{location}] Could not send error screenshot: {e2}")
         driver.quit()
