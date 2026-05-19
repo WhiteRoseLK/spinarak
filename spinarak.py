@@ -154,7 +154,9 @@ def create_booking(num_of_guests, location):
         if start_link:
             start_link.click()
         else:
-            debug_screenshot(driver, location, 'no-start-link-found')
+            if location not in debug_screenshot_sent:
+                debug_screenshot_sent.add(location)
+                debug_screenshot(driver, location, 'no-start-link-found')
             raise Exception("Could not find start reservation link")
         time.sleep(random.randint(3, 6))
         select = Select(driver.find_element(By.NAME, 'guest'))
