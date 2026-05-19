@@ -124,7 +124,7 @@ async def create_booking(num_of_guests, location):
         try:
             await tab.execute_script(
                 "var cb = document.querySelector('input[type=\"checkbox\"]');"
-                "if(cb){ cb.scrollIntoView(); cb.checked=true; cb.dispatchEvent(new Event('change',{bubbles:true})); }"
+                "if(cb){ cb.scrollIntoView(); cb.click(); }"
             )
             await asyncio.sleep(1)
             await tab.execute_script(
@@ -158,6 +158,10 @@ async def create_booking(num_of_guests, location):
 
             await navigate_to_month(tab, target_month, target_year)
             await asyncio.sleep(random.uniform(1, 2))
+
+            if location not in debug_screenshot_sent:
+                debug_screenshot_sent.add(location)
+                await take_debug_screenshot(tab, location, 'calendar-page')
 
             html = await tab.page_source
             soup = BeautifulSoup(html, "html.parser")
