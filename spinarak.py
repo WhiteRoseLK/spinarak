@@ -20,6 +20,7 @@ target_month = 7
 target_year = 2026
 test_mode = os.environ.get('TEST_MODE', '').lower() == 'true'
 error_screenshot_sent = set()
+debug_screenshot_sent = set()
 
 os.makedirs('hits', exist_ok=True)
 os.makedirs('debug', exist_ok=True)
@@ -133,7 +134,8 @@ def create_booking(num_of_guests, location):
         submit = driver.find_element(By.CSS_SELECTOR, "button[type='submit'], input[type='submit'], #forms-agree button")
         driver.execute_script("arguments[0].click();", submit)
         time.sleep(random.randint(3, 6))
-        if location not in error_screenshot_sent:
+        if location not in debug_screenshot_sent:
+            debug_screenshot_sent.add(location)
             debug_screenshot(driver, location, 'after-cgu')
         # Click the "start reservation" link — try multiple selectors as the site may change
         start_link = None
