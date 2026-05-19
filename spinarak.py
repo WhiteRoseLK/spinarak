@@ -1,4 +1,4 @@
-import asyncio, os, uuid, random, requests
+import asyncio, os, uuid, random, requests, glob
 from datetime import date
 from bs4 import BeautifulSoup
 from pyvirtualdisplay import Display
@@ -20,6 +20,9 @@ debug_screenshot_sent = set()
 
 os.makedirs('hits', exist_ok=True)
 os.makedirs('debug', exist_ok=True)
+
+for f in glob.glob('debug/*.png') + glob.glob('hits/*.png'):
+    os.remove(f)
 
 BOOKING_URLS = {
     'Tokyo': 'https://reserve.pokemon-cafe.jp/reserve/step1',
@@ -119,13 +122,15 @@ async def create_booking(num_of_guests, location):
             return
 
         try:
-            checkbox = await tab.find(tag_name='input', timeout=10)
-            await checkbox.scroll_into_view()
+            await tab.execute_script(
+                "var cb = document.querySelector('input[type=\"checkbox\"]');"
+                "if(cb){ cb.scrollIntoView(); cb.checked=true; cb.dispatchEvent(new Event('change',{bubbles:true})); }"
+            )
             await asyncio.sleep(1)
-            await checkbox.click_using_js()
-
-            submit = await tab.find(tag_name='button', timeout=5)
-            await submit.click_using_js()
+            await tab.execute_script(
+                "var btn = document.querySelector('button[type=\"submit\"], input[type=\"submit\"], #forms-agree button, button');"
+                "if(btn) btn.click();"
+            )
             await asyncio.sleep(random.uniform(3, 6))
 
             await asyncio.sleep(5)  # wait for CF auto-solve
