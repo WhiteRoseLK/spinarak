@@ -174,13 +174,12 @@ def create_booking(num_of_guests, location):
         driver.quit()
     except Exception as e:
         print(f"[{location}] Error: {e}")
-        if test_mode:
-            try:
-                filename = f'hits/pokemon-cafe-test-error-{date.today().strftime("%Y%m%d")}-{uuid.uuid4().hex}.png'
-                driver.save_screenshot(filename)
-                send_telegram_test(filename, location)
-            except Exception as e2:
-                print(f"[{location}] Could not send error screenshot: {e2}")
+        try:
+            filename = f'hits/pokemon-cafe-error-{location.lower()}-{date.today().strftime("%Y%m%d")}-{uuid.uuid4().hex}.png'
+            driver.save_screenshot(filename)
+            send_telegram_test(filename, location)
+        except Exception as e2:
+            print(f"[{location}] Could not send error screenshot: {e2}")
         driver.quit()
 
 iterations = 1 if test_mode else num_iterations
