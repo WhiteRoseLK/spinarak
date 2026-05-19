@@ -18,6 +18,7 @@ locations = ['Tokyo', 'Osaka']
 target_days = ['18', '19', '20', '21']  # July 2026
 target_month = 7
 target_year = 2026
+test_mode = os.environ.get('TEST_MODE', '').lower() == 'true'
 
 BOOKING_URLS = {
     'Tokyo': 'https://reserve.pokemon-cafe.jp/reserve/step1',
@@ -52,6 +53,21 @@ def send_telegram(avail_slots, filename, location):
             )
         response.raise_for_status()
         print("Telegram message sent!")
+    except Exception as e:
+        print(f"Telegram error: {str(e)}")
+
+def send_telegram_test(filename, location):
+    try:
+        base_url = f"https://api.telegram.org/bot{telegram_token}"
+        text = f"\U0001F9EA [TEST - {location}] No slots found — screenshot of current calendar page"
+        with open(filename, 'rb') as photo:
+            response = requests.post(
+                f"{base_url}/sendPhoto",
+                data={"chat_id": telegram_chat_id, "caption": text},
+                files={"photo": photo}
+            )
+        response.raise_for_status()
+        print("Telegram test message sent!")
     except Exception as e:
         print(f"Telegram error: {str(e)}")
 
@@ -131,6 +147,11 @@ def create_booking(num_of_guests, location):
             filename = f'hits/pokemon-cafe-slot-found-{date.today().strftime("%Y%m%d")}-{uuid.uuid4().hex}.png'
             driver.save_screenshot(filename)
             send_telegram(available_slots, filename, location)
+        elif test_mode:
+            print(f'[{location}] TEST MODE — sending screenshot anyway')
+            filename = f'hits/pokemon-cafe-test-{date.today().strftime("%Y%m%d")}-{uuid.uuid4().hex}.png'
+            driver.save_screenshot(filename)
+            send_telegram_test(filename, location)
         else:
             print(f"[{location}] No available slots found for 18-21 July :(")
 
@@ -138,6 +159,7 @@ def create_booking(num_of_guests, location):
     except NoSuchElementException:
         pass
 
-for x in range(num_iterations):
+iterations = 1 if test_mode else num_iterations
+for x in range(iterations):
     for loc in locations:
         create_booking(num_of_guests, loc)

@@ -6,6 +6,11 @@ on:
   push:
     branches: [ 'main' ] 
   workflow_dispatch:
+    inputs:
+      test_mode:
+        description: 'Send a screenshot per location even if no slots are found'
+        type: boolean
+        default: false
 
 jobs:
   run-spinarak:
@@ -26,6 +31,7 @@ jobs:
       env:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        TEST_MODE: ${{ inputs.test_mode }}
       run: |
           echo -e "current NAT'd source IP address: `curl -s api.ipify.org`\n\n"
           python spinarak.py
