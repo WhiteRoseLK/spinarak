@@ -1,7 +1,6 @@
 import asyncio, os, uuid, random, requests, glob
 from datetime import date
 from bs4 import BeautifulSoup
-from pyvirtualdisplay import Display
 from pydoll.browser import Chrome
 from pydoll.browser.options import ChromiumOptions
 
@@ -33,8 +32,6 @@ SITE_URLS = {
     'Osaka': 'https://osaka.pokemon-cafe.jp/',
 }
 
-display = Display(visible=0, size=(1200, 1200))
-display.start()
 
 def send_telegram(avail_slots, filename, location):
     try:
@@ -110,6 +107,8 @@ async def create_booking(num_of_guests, location):
     options.add_argument('--window-size=1200,1200')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-gpu')
+    options.add_argument('--headless=new')
 
     async with Chrome(options=options) as browser:
         tab = await browser.start()
