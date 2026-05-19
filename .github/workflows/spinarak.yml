@@ -20,14 +20,12 @@ jobs:
       run: |
         # font package needed for Japanese to render in captured screenshots
         sudo apt-get install fonts-noto-cjk
-        pip install chromedriver-autoinstaller selenium pyvirtualdisplay beautifulsoup4
+        pip install chromedriver-autoinstaller selenium pyvirtualdisplay beautifulsoup4 requests
         
     - name: Run Python Selenium script
       env:
-        GMAIL_SENDER: ${{ secrets.GMAIL_SENDER }}
-        GMAIL_APP_PW: ${{ secrets.GMAIL_APP_PW }}
-        GMAIL_RECIPIENT: ${{ secrets.GMAIL_RECIPIENT }}
-        GMAIL_RECIPIENT_2: ${{ secrets.GMAIL_RECIPIENT_2 }}
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       run: |
           echo -e "current NAT'd source IP address: `curl -s api.ipify.org`\n\n"
           python spinarak.py
