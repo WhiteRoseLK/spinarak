@@ -19,6 +19,7 @@ target_days = ['18', '19', '20', '21']  # July 2026
 target_month = 7
 target_year = 2026
 test_mode = os.environ.get('TEST_MODE', '').lower() == 'true'
+error_screenshot_sent = set()  # prevents sending more than one error screenshot per location per run
 
 BOOKING_URLS = {
     'Tokyo': 'https://reserve.pokemon-cafe.jp/reserve/step1',
@@ -123,16 +124,14 @@ def create_booking(num_of_guests, location):
         return
 
     try:
-        # Scroll to bottom so the CGU checkbox becomes interactable
-        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        time.sleep(random.randint(2, 3))
-        # Accept terms: try the original ID first, then fall back to generic checkbox/button
-        try:
-            driver.find_element(By.XPATH, "//*[@id=\"forms-agree\"]/div/div[1]/label").click()
-            driver.find_element(By.XPATH, "//*[@id=\"forms-agree\"]/div/div[2]/button").click()
-        except NoSuchElementException:
-            driver.find_element(By.XPATH, "//input[@type='checkbox']").click()
-            driver.find_element(By.XPATH, "//button[@type='submit'] | //input[@type='submit'] | //button[contains(@class,'agree')] | //button[contains(@class,'next')]").click()
+        # Scroll the CGU checkbox into view and click it via JS to bypass visibility issues
+        checkbox = driver.find_element(By.CSS_SELECTOR, "input[type='checkbox']")
+        driver.execute_script("arguments[0].scrollIntoView(true);", checkbox)
+        time.sleep(1)
+        driver.execute_script("arguments[0].click();", checkbox)
+        # Click the submit/next button
+        submit = driver.find_element(By.CSS_SELECTOR, "button[type='submit'], input[type='submit'], #forms-agree button")
+        driver.execute_script("arguments[0].click();", submit)
         time.sleep(random.randint(3, 6))
         driver.find_element(By.XPATH, "/html/body/div/div/div[2]/div/div/a").click()
         time.sleep(random.randint(3, 6))
@@ -182,12 +181,14 @@ def create_booking(num_of_guests, location):
         driver.quit()
     except Exception as e:
         print(f"[{location}] Error: {e}")
-        try:
-            filename = f'hits/pokemon-cafe-error-{location.lower()}-{date.today().strftime("%Y%m%d")}-{uuid.uuid4().hex}.png'
-            driver.save_screenshot(filename)
-            send_telegram_test(filename, location)
-        except Exception as e2:
-            print(f"[{location}] Could not send error screenshot: {e2}")
+        if location not in error_screenshot_sent:
+            error_screenshot_sent.add(location)
+            try:
+                filename = f'hits/pokemon-cafe-error-{location.lower()}-{date.today().strftime("%Y%m%d")}-{uuid.uuid4().hex}.png'
+                driver.save_screenshot(filename)
+                send_telegram_test(filename, location)
+            except Exception as e2:
+                print(f"[{location}] Could not send error screenshot: {e2}")
         driver.quit()
 
 iterations = 1 if test_mode else num_iterations
