@@ -9,30 +9,40 @@ from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.action_chains import ActionChains
 
-# Define your Telegram settings as repo secrets
 telegram_token = os.environ['TELEGRAM_BOT_TOKEN']
 telegram_chat_id = os.environ['TELEGRAM_CHAT_ID']
 
 num_iterations = 10
-num_of_guests=3
-location = 'Osaka'
+num_of_guests = 6
+locations = ['Tokyo', 'Osaka']
+target_days = ['18', '19', '20', '21']  # July 2026
+target_month = 7
+target_year = 2026
+
+BOOKING_URLS = {
+    'Tokyo': 'https://reserve.pokemon-cafe.jp/reserve/step1',
+    'Osaka': 'https://osaka.pokemon-cafe.jp/reserve/step1',
+}
+
+SITE_URLS = {
+    'Tokyo': 'https://reserve.pokemon-cafe.jp/',
+    'Osaka': 'https://osaka.pokemon-cafe.jp/',
+}
 
 magic_cell = ''
 
 display = Display(visible=0, size=(800, 800))
 display.start()
 
-chromedriver_autoinstaller.install()  # Check if the current version of chromedriver exists
-                                      # and if it doesn't exist, download it automatically,
-                                      # then add chromedriver to path
+chromedriver_autoinstaller.install()
 
-def send_telegram(avail_slots, filename):
+def send_telegram(avail_slots, filename, location):
     try:
         base_url = f"https://api.telegram.org/bot{telegram_token}"
-        text = "\U0001F6A8 Available days found by Spinarak bot:\n\n"
+        text = f"\U0001F6A8 [{location}] Available days found by Spinarak bot:\n\n"
         for day in avail_slots:
             text += f"• {day}\n"
-        text += "\nGo book now: https://osaka.pokemon-cafe.jp/reserve/step1"
+        text += f"\nGo book now: {BOOKING_URLS[location]}"
 
         with open(filename, 'rb') as photo:
             response = requests.post(
@@ -45,27 +55,45 @@ def send_telegram(avail_slots, filename):
     except Exception as e:
         print(f"Telegram error: {str(e)}")
 
+def navigate_to_month(driver, month, year):
+    # Navigate forward until the target month/year is visible on the calendar.
+    # XPaths below cover common patterns — may need adjustment if the site changes.
+    for _ in range(24):
+        page = driver.page_source
+        if str(year) in page and (f"{month}月" in page or f"/{month}/" in page):
+            return
+        next_btn = None
+        for xpath in [
+            "//*[contains(@class,'next')]",
+            "//*[contains(@class,'arrow-right')]",
+            "//button[contains(text(),'翌月')]",
+            "//a[contains(text(),'翌月')]",
+            "//*[contains(@aria-label,'next')]",
+        ]:
+            try:
+                next_btn = driver.find_element(By.XPATH, xpath)
+                break
+            except NoSuchElementException:
+                continue
+        if next_btn:
+            next_btn.click()
+            time.sleep(random.randint(1, 2))
+        else:
+            print("Could not find next month button — scraping current month")
+            return
+
+def is_target_day(text):
+    for day in target_days:
+        if (day + '日') in text or f'/{day}' in text or text.strip().startswith(day):
+            return True
+    return False
+
 def create_booking(num_of_guests, location):
-    '''Create a reservation for Pokemon Cafe
-    Keyword arguments:
-    num_of_guests -- number of guests to book (1-8)
-    '''
-
-    if location == "Tokyo":
-        website = "https://reserve.pokemon-cafe.jp/"
-    elif location == "Osaka":
-        website = "https://osaka.pokemon-cafe.jp/"
-
     chrome_options = webdriver.ChromeOptions()
-    options = [
-        "--window-size=1200,1200",
-    ]
-
-    for option in options:
-        chrome_options.add_argument(option)
+    chrome_options.add_argument("--window-size=1200,1200")
 
     driver = webdriver.Chrome(options=chrome_options)
-    driver.get(website)
+    driver.get(SITE_URLS[location])
 
     try:
         driver.find_element(By.XPATH, "//*[@id=\"forms-agree\"]/div/div[1]/label").click()
@@ -75,8 +103,10 @@ def create_booking(num_of_guests, location):
         time.sleep(random.randint(3, 6))
         select = Select(driver.find_element(By.NAME, 'guest'))
         time.sleep(random.randint(2, 3))
-
         select.select_by_index(num_of_guests)
+
+        navigate_to_month(driver, target_month, target_year)
+        time.sleep(random.randint(1, 2))
 
         soup = BeautifulSoup(driver.page_source, "html.parser")
         calendar_cells = soup.find_all("li")
@@ -85,26 +115,29 @@ def create_booking(num_of_guests, location):
         available_slots = []
         global magic_cell
         for cell in calendar_cells:
-            if "(full)" not in cell.text.lower() and "n/a" not in cell.text.lower():
-                available_slots.append(cell.text.strip())
+            text = cell.text.strip()
+            if "(full)" not in text.lower() and "n/a" not in text.lower() and is_target_day(text):
+                available_slots.append(text)
                 available = True
-                magic_cell = cell.text
+                magic_cell = text
 
         driver.execute_script('document.getElementsByTagName("html")[0].style.scrollBehavior = "auto"')
         element = driver.find_element(By.XPATH, "/html/body/div/div/div[2]/div/div[1]/p[3]")
         element.location_once_scrolled_into_view
         if available:
-            print('Slot(s) AVAILABLE: ')
+            print(f'[{location}] Slot(s) AVAILABLE:')
             for day in available_slots:
-                print(day + ' ')
-            filename = 'hits/pokemon-cafe-slot-found-' + date.today().strftime("%Y%m%d") + '-' + str(uuid.uuid4().hex) + '.png'
+                print(day)
+            filename = f'hits/pokemon-cafe-slot-found-{date.today().strftime("%Y%m%d")}-{uuid.uuid4().hex}.png'
             driver.save_screenshot(filename)
-            send_telegram(available_slots, filename)
+            send_telegram(available_slots, filename, location)
         else:
-            print("No available slots found :(")
+            print(f"[{location}] No available slots found for 18-21 July :(")
 
         driver.quit()
     except NoSuchElementException:
         pass
 
-[create_booking(num_of_guests, location) for x in range(num_iterations)]
+for x in range(num_iterations):
+    for loc in locations:
+        create_booking(num_of_guests, loc)
