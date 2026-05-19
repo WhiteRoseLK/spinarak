@@ -124,6 +124,16 @@ def create_booking(num_of_guests, location):
         navigate_to_month(driver, target_month, target_year)
         time.sleep(random.randint(1, 2))
 
+        # In test mode, send a screenshot immediately after navigation
+        # so we can verify the bot is on the right page regardless of what happens next
+        if test_mode:
+            print(f'[{location}] TEST MODE — sending screenshot of current calendar page')
+            filename = f'hits/pokemon-cafe-test-{date.today().strftime("%Y%m%d")}-{uuid.uuid4().hex}.png'
+            driver.save_screenshot(filename)
+            send_telegram_test(filename, location)
+            driver.quit()
+            return
+
         soup = BeautifulSoup(driver.page_source, "html.parser")
         calendar_cells = soup.find_all("li")
 
@@ -147,17 +157,20 @@ def create_booking(num_of_guests, location):
             filename = f'hits/pokemon-cafe-slot-found-{date.today().strftime("%Y%m%d")}-{uuid.uuid4().hex}.png'
             driver.save_screenshot(filename)
             send_telegram(available_slots, filename, location)
-        elif test_mode:
-            print(f'[{location}] TEST MODE — sending screenshot anyway')
-            filename = f'hits/pokemon-cafe-test-{date.today().strftime("%Y%m%d")}-{uuid.uuid4().hex}.png'
-            driver.save_screenshot(filename)
-            send_telegram_test(filename, location)
         else:
             print(f"[{location}] No available slots found for 18-21 July :(")
 
         driver.quit()
-    except NoSuchElementException:
-        pass
+    except Exception as e:
+        print(f"[{location}] Error: {e}")
+        if test_mode:
+            try:
+                filename = f'hits/pokemon-cafe-test-error-{date.today().strftime("%Y%m%d")}-{uuid.uuid4().hex}.png'
+                driver.save_screenshot(filename)
+                send_telegram_test(filename, location)
+            except Exception as e2:
+                print(f"[{location}] Could not send error screenshot: {e2}")
+        driver.quit()
 
 iterations = 1 if test_mode else num_iterations
 for x in range(iterations):
