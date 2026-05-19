@@ -133,7 +133,8 @@ def create_booking(num_of_guests, location):
         submit = driver.find_element(By.CSS_SELECTOR, "button[type='submit'], input[type='submit'], #forms-agree button")
         driver.execute_script("arguments[0].click();", submit)
         time.sleep(random.randint(3, 6))
-        debug_screenshot(driver, location, 'after-cgu')
+        if location not in error_screenshot_sent:
+            debug_screenshot(driver, location, 'after-cgu')
         # Click the "start reservation" link — try multiple selectors as the site may change
         start_link = None
         for selector in [
