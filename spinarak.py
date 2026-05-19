@@ -133,7 +133,26 @@ def create_booking(num_of_guests, location):
         submit = driver.find_element(By.CSS_SELECTOR, "button[type='submit'], input[type='submit'], #forms-agree button")
         driver.execute_script("arguments[0].click();", submit)
         time.sleep(random.randint(3, 6))
-        driver.find_element(By.XPATH, "/html/body/div/div/div[2]/div/div/a").click()
+        debug_screenshot(driver, location, 'after-cgu')
+        # Click the "start reservation" link — try multiple selectors as the site may change
+        start_link = None
+        for selector in [
+            (By.XPATH, "/html/body/div/div/div[2]/div/div/a"),
+            (By.XPATH, "//a[contains(@href,'step')]"),
+            (By.XPATH, "//a[contains(@href,'reserve')]"),
+            (By.XPATH, "//a[contains(text(),'予約')]"),
+            (By.CSS_SELECTOR, "a.btn, a.button, .reservation a, main a"),
+        ]:
+            try:
+                start_link = driver.find_element(*selector)
+                break
+            except NoSuchElementException:
+                continue
+        if start_link:
+            start_link.click()
+        else:
+            debug_screenshot(driver, location, 'no-start-link-found')
+            raise Exception("Could not find start reservation link")
         time.sleep(random.randint(3, 6))
         select = Select(driver.find_element(By.NAME, 'guest'))
         time.sleep(random.randint(2, 3))
