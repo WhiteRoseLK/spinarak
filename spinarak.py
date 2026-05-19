@@ -115,40 +115,46 @@ async def create_booking(num_of_guests, location):
 
     async with Chrome(options=options) as browser:
         tab = await browser.start()
-        await tab.enable_auto_solve_cloudflare_captcha(time_to_wait_captcha=15)
-        await tab.go_to(SITE_URLS[location])
-        await asyncio.sleep(random.uniform(3, 5))
+        await tab.enable_auto_solve_cloudflare_captcha(time_to_wait_captcha=30)
+
+        # Try step1 directly first — skips the Cloudflare-protected landing page
+        await tab.go_to(BOOKING_URLS[location])
+        await asyncio.sleep(random.uniform(5, 8))
 
         if test_mode:
             await take_debug_screenshot(tab, location, 'landing-page')
             return
 
         try:
-            await tab.execute_script(
-                "var cb = document.querySelector('input[type=\"checkbox\"]');"
-                "if(cb){ cb.scrollIntoView(); cb.click(); }"
-            )
-            await asyncio.sleep(1)
-            await tab.execute_script(
-                "var btn = document.querySelector('button[type=\"submit\"], input[type=\"submit\"], #forms-agree button, button');"
-                "if(btn) btn.click();"
-            )
-            await asyncio.sleep(random.uniform(3, 6))
-
-            await asyncio.sleep(5)  # wait for CF auto-solve
+            html = await tab.page_source
+            on_cf = 'confirm you are human' in html.lower() or 'begin' in html.lower()
+            on_cgu = 'ご確認' in html or 'checkbox' in html.lower()
+            on_calendar = 'guest' in html.lower() or 'reserve' in html.lower()
 
             if location not in debug_screenshot_sent:
                 debug_screenshot_sent.add(location)
-                await take_debug_screenshot(tab, location, 'after-cgu')
+                await take_debug_screenshot(tab, location, f'page-{"cf" if on_cf else "cgu" if on_cgu else "calendar" if on_calendar else "unknown"}')
 
-            start_link = await tab.find(tag_name='a', timeout=5, raise_exc=False)
-            if start_link:
-                await start_link.click()
-            else:
-                if location not in error_screenshot_sent:
-                    error_screenshot_sent.add(location)
-                    await take_debug_screenshot(tab, location, 'no-start-link')
-                raise Exception("Could not find start reservation link")
+            if on_cf:
+                # Click "Begin >" and wait for CF to resolve
+                await tab.execute_script("var btn=document.querySelector('button');if(btn)btn.click();")
+                await asyncio.sleep(15)
+                html = await tab.page_source
+                on_cgu = 'ご確認' in html or 'checkbox' in html.lower()
+                if not on_cgu:
+                    raise Exception("Still blocked by Cloudflare after Begin click")
+
+            if on_cgu:
+                await tab.execute_script(
+                    "var cb=document.querySelector('input[type=\"checkbox\"]');"
+                    "if(cb){cb.scrollIntoView();cb.click();}"
+                )
+                await asyncio.sleep(1)
+                await tab.execute_script(
+                    "var btn=document.querySelector('button[type=\"submit\"],input[type=\"submit\"],#forms-agree button,button');"
+                    "if(btn)btn.click();"
+                )
+                await asyncio.sleep(random.uniform(5, 8))
 
             await asyncio.sleep(random.uniform(3, 6))
 
