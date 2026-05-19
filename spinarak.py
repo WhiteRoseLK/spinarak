@@ -1,12 +1,9 @@
-import undetected_chromedriver as uc
-import os, uuid, random, time, requests
+import asyncio, os, uuid, random, requests
 from datetime import date
 from bs4 import BeautifulSoup
 from pyvirtualdisplay import Display
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import Select
-from selenium.common.exceptions import NoSuchElementException
-from selenium.webdriver.common.action_chains import ActionChains
+from pydoll.browser import Chrome
+from pydoll.browser.options import ChromiumOptions
 
 telegram_token = os.environ['TELEGRAM_BOT_TOKEN']
 telegram_chat_id = os.environ['TELEGRAM_CHAT_ID']
@@ -28,15 +25,12 @@ BOOKING_URLS = {
     'Tokyo': 'https://reserve.pokemon-cafe.jp/reserve/step1',
     'Osaka': 'https://osaka.pokemon-cafe.jp/reserve/step1',
 }
-
 SITE_URLS = {
     'Tokyo': 'https://reserve.pokemon-cafe.jp/',
     'Osaka': 'https://osaka.pokemon-cafe.jp/',
 }
 
-magic_cell = ''
-
-display = Display(visible=0, size=(800, 800))
+display = Display(visible=0, size=(1200, 1200))
 display.start()
 
 def send_telegram(avail_slots, filename, location):
@@ -72,30 +66,11 @@ def send_telegram_debug(filename, location, label):
     except Exception as e:
         print(f"Telegram error: {str(e)}")
 
-def navigate_to_month(driver, month, year):
-    for _ in range(24):
-        page = driver.page_source
-        if str(year) in page and (f"{month}月" in page or f"/{month}/" in page):
-            return
-        next_btn = None
-        for xpath in [
-            "//*[contains(@class,'next')]",
-            "//*[contains(@class,'arrow-right')]",
-            "//button[contains(text(),'翌月')]",
-            "//a[contains(text(),'翌月')]",
-            "//*[contains(@aria-label,'next')]",
-        ]:
-            try:
-                next_btn = driver.find_element(By.XPATH, xpath)
-                break
-            except NoSuchElementException:
-                continue
-        if next_btn:
-            next_btn.click()
-            time.sleep(random.randint(1, 2))
-        else:
-            print("Could not find next month button — scraping current month")
-            return
+async def take_debug_screenshot(tab, location, step):
+    filename = f'debug/{location.lower()}-{step}-{date.today().strftime("%Y%m%d")}-{uuid.uuid4().hex}.png'
+    await tab.take_screenshot(path=filename)
+    send_telegram_debug(filename, location, step)
+    return filename
 
 def is_target_day(text):
     for day in target_days:
@@ -103,104 +78,117 @@ def is_target_day(text):
             return True
     return False
 
-def debug_screenshot(driver, location, step):
-    filename = f'debug/{location.lower()}-{step}-{date.today().strftime("%Y%m%d")}-{uuid.uuid4().hex}.png'
-    driver.save_screenshot(filename)
-    send_telegram_debug(filename, location, step)
-    return filename
-
-def create_booking(num_of_guests, location):
-    chrome_options = uc.ChromeOptions()
-    chrome_options.add_argument("--window-size=1200,1200")
-
-    driver = uc.Chrome(options=chrome_options)
-    driver.get(SITE_URLS[location])
-    time.sleep(random.randint(3, 5))
-
-    if test_mode:
-        debug_screenshot(driver, location, 'landing-page')
-        driver.quit()
-        return
-
-    try:
-        # Scroll the CGU checkbox into view and click via JS
-        checkbox = driver.find_element(By.CSS_SELECTOR, "input[type='checkbox']")
-        driver.execute_script("arguments[0].scrollIntoView(true);", checkbox)
-        time.sleep(1)
-        driver.execute_script("arguments[0].click();", checkbox)
-        submit = driver.find_element(By.CSS_SELECTOR, "button[type='submit'], input[type='submit'], #forms-agree button")
-        driver.execute_script("arguments[0].click();", submit)
-        time.sleep(random.randint(3, 6))
-        if location not in debug_screenshot_sent:
-            debug_screenshot_sent.add(location)
-            debug_screenshot(driver, location, 'after-cgu')
-        # Click the "start reservation" link — try multiple selectors as the site may change
-        start_link = None
+async def navigate_to_month(tab, month, year):
+    for _ in range(24):
+        html = await tab.page_source
+        if str(year) in html and (f"{month}月" in html or f"/{month}/" in html):
+            return
+        next_btn = None
         for selector in [
-            (By.XPATH, "/html/body/div/div/div[2]/div/div/a"),
-            (By.XPATH, "//a[contains(@href,'step')]"),
-            (By.XPATH, "//a[contains(@href,'reserve')]"),
-            (By.XPATH, "//a[contains(text(),'予約')]"),
-            (By.CSS_SELECTOR, "a.btn, a.button, .reservation a, main a"),
+            {'class_name': 'next'},
+            {'tag_name': 'button', 'text': '翌月'},
+            {'tag_name': 'a', 'text': '翌月'},
         ]:
             try:
-                start_link = driver.find_element(*selector)
-                break
-            except NoSuchElementException:
+                next_btn = await tab.find(**selector, timeout=2, raise_exc=False)
+                if next_btn:
+                    break
+            except Exception:
                 continue
-        if start_link:
-            start_link.click()
+        if next_btn:
+            await next_btn.click()
+            await asyncio.sleep(random.uniform(1, 2))
         else:
+            print("Could not find next month button — scraping current month")
+            return
+
+async def create_booking(num_of_guests, location):
+    options = ChromiumOptions()
+    options.add_argument('--window-size=1200,1200')
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+
+    async with Chrome(options=options) as browser:
+        tab = await browser.start()
+        await tab.enable_auto_solve_cloudflare_captcha(time_to_wait_captcha=15)
+        await tab.go_to(SITE_URLS[location])
+        await asyncio.sleep(random.uniform(3, 5))
+
+        if test_mode:
+            await take_debug_screenshot(tab, location, 'landing-page')
+            return
+
+        try:
+            checkbox = await tab.find(tag_name='input', timeout=10)
+            await checkbox.scroll_into_view()
+            await asyncio.sleep(1)
+            await checkbox.click_using_js()
+
+            submit = await tab.find(tag_name='button', timeout=5)
+            await submit.click_using_js()
+            await asyncio.sleep(random.uniform(3, 6))
+
+            await asyncio.sleep(5)  # wait for CF auto-solve
+
             if location not in debug_screenshot_sent:
                 debug_screenshot_sent.add(location)
-                debug_screenshot(driver, location, 'no-start-link-found')
-            raise Exception("Could not find start reservation link")
-        time.sleep(random.randint(3, 6))
-        select = Select(driver.find_element(By.NAME, 'guest'))
-        time.sleep(random.randint(2, 3))
-        select.select_by_index(num_of_guests)
+                await take_debug_screenshot(tab, location, 'after-cgu')
 
-        navigate_to_month(driver, target_month, target_year)
-        time.sleep(random.randint(1, 2))
+            start_link = await tab.find(tag_name='a', timeout=5, raise_exc=False)
+            if start_link:
+                await start_link.click()
+            else:
+                if location not in error_screenshot_sent:
+                    error_screenshot_sent.add(location)
+                    await take_debug_screenshot(tab, location, 'no-start-link')
+                raise Exception("Could not find start reservation link")
 
-        soup = BeautifulSoup(driver.page_source, "html.parser")
-        calendar_cells = soup.find_all("li")
+            await asyncio.sleep(random.uniform(3, 6))
 
-        available = False
-        available_slots = []
-        global magic_cell
-        for cell in calendar_cells:
-            text = cell.text.strip()
-            if "(full)" not in text.lower() and "n/a" not in text.lower() and is_target_day(text):
-                available_slots.append(text)
-                available = True
-                magic_cell = text
+            await tab.execute_script(
+                f"var s=document.querySelector('select[name=\"guest\"]');"
+                f"if(s){{s.value='{num_of_guests}';s.dispatchEvent(new Event('change'));}}"
+            )
+            await asyncio.sleep(random.uniform(2, 3))
 
-        driver.execute_script('document.getElementsByTagName("html")[0].style.scrollBehavior = "auto"')
-        element = driver.find_element(By.XPATH, "/html/body/div/div/div[2]/div/div[1]/p[3]")
-        element.location_once_scrolled_into_view
-        if available:
-            print(f'[{location}] Slot(s) AVAILABLE:')
-            for day in available_slots:
-                print(day)
-            filename = f'hits/pokemon-cafe-slot-found-{date.today().strftime("%Y%m%d")}-{uuid.uuid4().hex}.png'
-            driver.save_screenshot(filename)
-            send_telegram(available_slots, filename, location)
-        else:
-            print(f"[{location}] No available slots found for 18-21 July :(")
+            await navigate_to_month(tab, target_month, target_year)
+            await asyncio.sleep(random.uniform(1, 2))
 
-        driver.quit()
-    except Exception as e:
-        print(f"[{location}] Error: {e}")
-        if location not in error_screenshot_sent:
-            error_screenshot_sent.add(location)
-            try:
-                debug_screenshot(driver, location, 'error')
-            except Exception as e2:
-                print(f"[{location}] Could not send error screenshot: {e2}")
-        driver.quit()
+            html = await tab.page_source
+            soup = BeautifulSoup(html, "html.parser")
+            calendar_cells = soup.find_all("li")
 
-iterations = 1 if test_mode else num_iterations
-for x in range(iterations):
-    for loc in locations:
-        create_booking(num_of_guests, loc)
+            available = False
+            available_slots = []
+            for cell in calendar_cells:
+                text = cell.text.strip()
+                if "(full)" not in text.lower() and "n/a" not in text.lower() and is_target_day(text):
+                    available_slots.append(text)
+                    available = True
+
+            if available:
+                print(f'[{location}] Slot(s) AVAILABLE:')
+                for day in available_slots:
+                    print(day)
+                filename = f'hits/pokemon-cafe-slot-found-{date.today().strftime("%Y%m%d")}-{uuid.uuid4().hex}.png'
+                await tab.take_screenshot(path=filename)
+                send_telegram(available_slots, filename, location)
+            else:
+                print(f"[{location}] No available slots found for 18-21 July :(")
+
+        except Exception as e:
+            print(f"[{location}] Error: {e}")
+            if location not in error_screenshot_sent:
+                error_screenshot_sent.add(location)
+                try:
+                    await take_debug_screenshot(tab, location, 'error')
+                except Exception as e2:
+                    print(f"[{location}] Could not send error screenshot: {e2}")
+
+async def main():
+    iterations = 1 if test_mode else num_iterations
+    for _ in range(iterations):
+        for loc in locations:
+            await create_booking(num_of_guests, loc)
+
+asyncio.run(main())
